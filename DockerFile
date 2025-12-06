@@ -1,0 +1,21 @@
+# Use a lightweight Python base image
+FROM python:3.9-slim-buster
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy the requirements file and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the application files
+COPY . .
+
+# Set environment variable for the model file name
+ENV model_file_name="best_sku110K_object_identification_yolov11n_model.pt"
+
+# Expose the port that Streamlit will run on (default is 8501)
+EXPOSE 8501
+
+# Command to run the Streamlit application
+ENTRYPOINT ["streamlit", "run", "main.py", "--server.port=8501", "--server.address=0.0.0.0"]
