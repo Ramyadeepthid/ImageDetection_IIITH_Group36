@@ -284,7 +284,7 @@ import random
 import textwrap
 
 # Import from backend
-from backend import ModelConfig, cluster_rows, find_gaps_in_row, draw_annotations_with_gaps
+from backend import ModelConfig, find_gaps_in_row, categorize_gaps, cluster_rows ,draw_annotations_with_gaps
 
 st.set_page_config(layout="wide", page_title="Group 36 Object Detection Image Viewer")
 
@@ -331,8 +331,11 @@ def predict_class_for_image(pil_image: Image.Image): # Now returns tuple (str, l
     for row_indices in rows:
         row_bboxes = [bboxes[i] for i in row_indices]
         gaps = find_gaps_in_row(row_bboxes)
-        all_gaps.extend(gaps)
+        overlapping_gaps, non_overlapping_gaps = categorize_gaps(gaps, bboxes)
+        all_gaps.extend(non_overlapping_gaps)
     
+
+
     # Classify based on total gaps
     total_gaps = len(all_gaps)
     if total_gaps == 0 or total_gaps == 1:  # Treating 1 as "minimal/no gaps"—adjust if needed
