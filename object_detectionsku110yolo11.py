@@ -7,9 +7,9 @@ Original file is located at
     https://colab.research.google.com/drive/1wvv9VWNKv_qoJ70Gu6dOpykKNNKR4BvT
 """
 
-!pip install ultralytics opencv-python
+#!pip install ultralytics opencv-python
 
-!nvidia-smi
+#!nvidia-smi
 
 from ultralytics import YOLO
 import shutil
