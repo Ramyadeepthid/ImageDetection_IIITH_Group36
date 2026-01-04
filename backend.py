@@ -13,8 +13,8 @@ class ModelConfig:
 
     def load_model(self):
         # model_file_name = os.getenv("model_file_name")
-        model_file_name = 'best_sku110K_object_identification_yolov11n_model.pt'
-        # model_file_name = 'best_sku110k_partial_data_with_labels.pt'
+        # model_file_name = 'best_sku110K_object_identification_yolov11n_model.pt'
+        model_file_name = 'best_sku110k_partial_data_with_labels.pt'
         # Prepend the /content/ path as the model file is located there
         # full_model_path = os.path.join('/content/', model_file_name)
         print(f"Loading model from file: {model_file_name}")
