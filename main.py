@@ -332,6 +332,8 @@ elif page == "Object Detection":
             return "Class1", [], []
         
         bboxes = results[0].boxes.xyxy.cpu().numpy().tolist()  # [[x1,y1,x2,y2], ...]
+        detected_classes = results[0].boxes.cls.cpu().numpy().astype(int)
+        class_names = results[0].names
         
         # Cluster into rows
         rows = cluster_rows(bboxes)
@@ -355,7 +357,8 @@ elif page == "Object Detection":
         else:  # >4
             cls = "Class3"
             
-        return cls, bboxes, all_gaps
+        # return cls, bboxes, all_gaps , detected_classes, class_names
+        return cls, bboxes, all_gaps , detected_classes, class_names
 
     # Utility: convert PIL image to base64 data URL (for inline HTML img)
     def pil_image_to_data_url(pil_img: Image.Image, fmt="JPEG", max_size=None):
@@ -439,7 +442,8 @@ elif page == "Object Detection":
                 continue
 
             # run prediction/classification (now using backend logic)
-            cls, bboxes, all_gaps = predict_class_for_image(pil)
+            # cls, bboxes, all_gaps = predict_class_for_image(pil)
+            cls, bboxes, all_gaps , detected_classes, class_names= predict_class_for_image(pil)
 
             key = make_key(idx, uploaded.name)
             
@@ -449,7 +453,8 @@ elif page == "Object Detection":
             pil.save(temp_original_image_path)
 
             # Draw annotations and gaps
-            annotated_path = draw_annotations_with_gaps(temp_original_image_path, bboxes, all_gaps, save_path=f"annotated_with_gaps_{idx}.jpg")
+            # annotated_path = draw_annotations_with_gaps(temp_original_image_path, bboxes, all_gaps, save_path=f"annotated_with_gaps_{idx}.jpg")
+            annotated_path = draw_annotations_with_gaps(temp_original_image_path, bboxes, detected_classes, class_names, all_gaps, save_path=f"annotated_with_gaps_{idx}.jpg")
             annotated_pil = Image.open(annotated_path)
             thumb_data_url = pil_image_to_data_url(annotated_pil, fmt="JPEG", max_size=(500,500))
             pil = annotated_pil  # Use for full preview too
