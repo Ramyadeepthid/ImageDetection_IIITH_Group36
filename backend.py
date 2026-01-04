@@ -13,7 +13,8 @@ class ModelConfig:
 
     def load_model(self):
         # model_file_name = os.getenv("model_file_name")
-        model_file_name = 'best_sku110K_object_identification_yolov11n_model.pt'
+        # model_file_name = 'best_sku110K_object_identification_yolov11n_model.pt'
+        model_file_name = 'best_sku110k_partial_data_with_labels.pt'
         # Prepend the /content/ path as the model file is located there
         # full_model_path = os.path.join('/content/', model_file_name)
         print(f"Loading model from file: {model_file_name}")
@@ -81,7 +82,7 @@ def cluster_rows(bboxes, row_tol=50):
 #     return gaps
 
 
-def draw_annotations_with_gaps(image_path, bboxes, gap_boxes, save_path="annotated_image_with_gaps.jpg"):
+def draw_annotations_with_gaps(image_path, bboxes, detected_classes, class_names, gap_boxes, save_path="annotated_image_with_gaps.jpg"):
     """
     Draws bounding boxes from predictions in green and gap boxes in red on the image.
     image_path: Path to the original image.
@@ -93,11 +94,49 @@ def draw_annotations_with_gaps(image_path, bboxes, gap_boxes, save_path="annotat
     if image is None:
         raise FileNotFoundError(f"Image not found at {image_path}")
 
+    
+    # Define font settings and colors
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.8
+    font_thickness = 2
+    box_thickness = 3
+
+    # Colors for bounding boxes and text
+    box_color = (255, 0, 0)  # Blue
+    text_color = (255, 255, 255) # White
+    text_background_color = (255, 0, 0) # Blue
+
+
     # Draw predicted bounding boxes in green
-    for (x1, y1, x2, y2) in bboxes:
+    for i, (x1, y1, x2, y2) in enumerate(bboxes):
         # Convert coordinates to integers
         x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
         cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)  # Green color, 2px thickness
+
+        # Prepare label text
+        class_id = detected_classes[i]
+        label = class_names[class_id]
+
+        # Get text size to position the label properly
+        (text_width, text_height), baseline = cv2.getTextSize(label, font, font_scale, font_thickness)
+
+        # Calculate text background position
+        text_x = x1
+        text_y = y1 - 10 # Position above the box
+
+        # Ensure the label does not go out of image bounds at the top
+        if text_y < text_height + baseline:
+            text_y = y2 + text_height + 10 # Position below the box if not enough space above
+
+        # Draw filled rectangle for text background
+        cv2.rectangle(image,
+                    (text_x, text_y - text_height - baseline),
+                    (text_x + text_width, text_y),
+                    text_background_color, -1)
+
+        # Put text label on the image
+        cv2.putText(image, label, (text_x, text_y - baseline),
+                    font, font_scale, text_color, font_thickness, cv2.LINE_AA)
 
     # Draw gap boxes in red
     for (x1, y1, x2, y2) in gap_boxes:
