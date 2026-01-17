@@ -279,6 +279,7 @@ try:
 except Exception as ex:
     pass
 
+from tkinter import Tk, filedialog
 import streamlit as st
 from PIL import Image
 from io import BytesIO
@@ -292,7 +293,7 @@ from backend import ModelConfig, find_gaps_in_row, categorize_gaps, cluster_rows
 st.set_page_config(layout="wide", page_title="Group 36 Object Detection Image Viewer")
 page = st.sidebar.radio(
     "Go to",
-    ["Object Detection", "Planogram Compliance"]
+    ["Object Detection", "Planogram Compliance", "Smart Shelf Dashboard"]
 )
 if page == "Home":
     st.title("Home")
@@ -604,6 +605,269 @@ elif page == "Object Detection":
         """,
         unsafe_allow_html=True
     )
+
+#For Planogram Compliance page
+    # -----------------------------
+    # For Planogram Compliance page
+    # -----------------------------
 elif page == "Planogram Compliance":
-    st.title("Planogram Compliance")
-    st.write("Planogram Compliance logic to be added here.")
+    st.title("Retail Shelf Analyzer with Gemini")
+
+    import cv2
+    import numpy as np
+    #import pytesseract
+    import json
+    import matplotlib.pyplot as plt
+    import google.genai as genai
+    from typing import List, Dict, Any, Tuple
+    import os
+
+    # -----------------------------
+    # Configuration
+    # -----------------------------
+    # Set your Google API Key here or ensure it's set in your environment
+    os.environ["GOOGLE_API_KEY"] = "api-key"  # Replace with your actual API Key
+
+    GEMINI_API_TOKEN = os.getenv("GOOGLE_API_KEY")
+
+    if not GEMINI_API_TOKEN:
+        st.error("Missing GOOGLE_API_KEY environment variable. Please set it before running.") 
+        st.stop()
+
+    # Initialize Gemini client
+    client = genai.Client(api_key=GEMINI_API_TOKEN)
+
+    # Set the Tesseract path if Tesseract is not in PATH
+    #pytesseract.pytesseract.tesseract_cmd = r"C:/Program Files/Tesseract-OCR/tesseract.exe" 
+
+    from backend import load_image,  extract_box_annotations, associate_text_to_boxes, build_llm_payload_for_gemini, generate_planogram_from_llm, visualize_planogram
+
+    client = genai.Client(api_key=GEMINI_API_TOKEN)
+    # Open a file dialog to select an image
+
+    # -----------------------------
+    # Streamlit UI
+    # -----------------------------
+
+    uploaded_file = st.file_uploader("Upload a retail shelf image", type=["jpg", "jpeg", "png"])
+
+    if uploaded_file:
+        # Save uploaded file temporarily
+        image_path = f"temp_{uploaded_file.name}"
+        with open(image_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+
+        if st.button("Analyze Shelf"):
+            img_cv2 = load_image(image_path)
+            #text_ann = extract_text_annotations(img_cv2)
+            text_ann = []  # Placeholder if OCR is not implemented
+            box_ann = extract_box_annotations(img_cv2)
+            box_ann = associate_text_to_boxes(text_ann, box_ann)
+
+            image_meta = {
+                "filename": uploaded_file.name,
+                "width": img_cv2.shape[1],
+                "height": img_cv2.shape[0]
+            }
+
+            st.image(cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB), caption="Processed Image")
+            # -----------------------------
+            # Gemini Processing
+            # -----------------------------
+
+            with open(image_path, "rb") as f:
+                image_data_bytes = f.read()
+
+            # Build prompt
+            prompt_text = build_llm_payload_for_gemini(image_meta, text_ann, box_ann)
+
+            print("Prompt to Gemini LLM:")
+            #print(prompt_text)
+
+            # Prepare Gemini request
+            contents = [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"text": prompt_text},
+                        {"inline_data": {"mime_type": "image/jpeg", "data": image_data_bytes}}
+                    ]
+                }
+            ]
+
+            st.info("Sending payload to Gemini LLM...")
+
+            try:
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=contents,
+                    config=genai.types.GenerateContentConfig(
+                        temperature=0.4,
+                        max_output_tokens=4096,
+                        response_mime_type="application/json"
+                    )
+                )
+
+                gemini_llm_output = json.loads(response.candidates[0].content.parts[0].text)
+
+                """st.write("### Gemini LLM Output:")
+                st.json(gemini_llm_output)"""
+
+                # Show summary and recommendations
+                st.subheader("📋 Shelf Summary")
+                st.write(gemini_llm_output.get("summary", "No summary available."))
+
+                st.subheader("✅ Recommendations")
+                st.write(gemini_llm_output.get("recommendations", "No recommendations available."))
+
+                st.subheader("Planogram Data")
+                st.write(gemini_llm_output.get("planogram", "No planogram data available."))
+
+                # Visualize the LLM generated planogram
+                st.subheader("🗂 Planogram Visualization")
+                planogram_data = generate_planogram_from_llm(gemini_llm_output)
+                visualize_planogram(planogram_data)
+
+            except Exception as e:
+                st.error(f"Error during Gemini LLM processing: {e}")
+        # Clean up temporary file
+        os.remove(image_path)
+    else:
+        st.info("Please upload an image to analyze the retail shelf.")
+
+#For Smart Shelf Dashboard page
+    # -----------------------------
+    # For Smart Shelf Dashboard page
+    # -----------------------------
+
+elif page == "Smart Shelf Dashboard":
+    st.title("SmartShelf | Retail Intelligence Dashboard")
+    import pandas as pd
+    import plotly.express as px
+    import plotly.graph_objects as go
+    import yaml
+    import logging
+
+    from backend import generate_dummy_data
+
+    # 1. Setup Logging & Config
+    logging.basicConfig(level=logging.INFO)
+    try:
+        with open('config.yaml', 'r') as f:
+            config = yaml.safe_load(f)
+    except FileNotFoundError:
+        # Fallback for demonstration if config is missing
+        config = {
+            'ui': {'theme_background': '#F5F5F5', 'theme_primary': '#6200EE'},
+            'paths': {'velocity_data': 'velocity.csv', 'revenue_data': 'revenue.csv', 'compliance_data': 'compliance.csv'}
+        }
+
+    # 2. UI Layout & Styling
+    st.set_page_config(page_title="SmartShelf AI", layout="wide")
+
+    st.markdown(f"""
+        <style>
+        .main {{ background-color: {config['ui']['theme_background']}; }}
+        .stMetric {{ background-color: white; padding: 15px; border-radius: 12px; border: 1px solid #E0E0E0; }}
+        [data-testid="stSidebar"] {{ background-color: white; }}
+        </style>
+    """, unsafe_allow_html=True)
+
+    # 3. Data Loading Helper
+    @st.cache_data
+    def load_all_data():
+        try:
+            print("Loading data paths...",config['paths']['velocity_data'],config['paths']['revenue_data'])
+            v_df = pd.read_csv(config['paths']['velocity_data'])
+            r_df = pd.read_csv(config['paths']['revenue_data'])
+            #c_df = pd.read_csv(config['paths']['compliance_data'])
+            
+            # Ensure timestamp conversion for weekly analysis
+            if 'timestamp' in v_df.columns:
+                v_df['timestamp'] = pd.to_datetime(v_df['timestamp'])
+            
+            return v_df, r_df
+        except Exception as e:
+            st.error(f"Error loading data: {e}")
+            return None, None
+
+    v_df, r_df = load_all_data()
+
+    # 5. Sidebar Filters
+    st.sidebar.header("Global Filters")
+    selected_cat = st.sidebar.multiselect("Product Category", options=v_df['category'].unique(), default=v_df['category'].unique())
+    filtered_v = v_df[v_df['category'].isin(selected_cat)]
+
+    # --- TABBED INTERFACE ---
+    tab1, tab2 = st.tabs(["⚡ Velocity & Efficiency", "💸 Revenue Impact"])
+
+    with tab1:
+        st.header("Restock Performance")
+        
+        # KPIs
+        col1, col2, col3 = st.columns(3)
+        avg_wait = filtered_v['wait_time_mins'].mean()
+        total_refills = len(filtered_v)
+        col1.metric("Avg. Wait Time", f"{int(avg_wait)} mins", delta="-12% (vs last week)")
+        col2.metric("Total Refill Actions", total_refills)
+        col3.metric("Stock Availability", "94.2%", delta="0.5%")
+
+        st.markdown("---")
+        
+        # --- NEW: WEEKLY TREND ANALYSIS ---
+        st.subheader("Weekly Restock Velocity Trends")
+        
+        # Process data for weekly view
+        # We group by the start of the week (Monday)
+        weekly_df = filtered_v.groupby(pd.Grouper(key='timestamp', freq='W-MON')).agg({
+            'wait_time_mins': 'mean',
+            'units_refilled': 'sum'
+        }).reset_index()
+
+        # Create Line Graph
+        fig_trend = px.line(weekly_df, x='timestamp', y='wait_time_mins', 
+                            title="Average Restock Wait Time (Weekly)",
+                            labels={'wait_time_mins': 'Avg. Wait Time (Mins)', 'timestamp': 'Week Starting'},
+                            markers=True)
+
+        # Add Industry Standard Line (e.g., 25 minutes)
+        industry_standard = 25 
+        fig_trend.add_hline(y=industry_standard, 
+                            line_dash="dash", 
+                            line_color="red", 
+                            annotation_text=f"Industry Standard ({industry_standard}m)", 
+                            annotation_position="bottom right")
+
+        fig_trend.update_layout(hovermode="x unified")
+        st.plotly_chart(fig_trend, use_container_width=True)
+
+        # --- WEEKLY RAW DATA TABLE ---
+        with st.expander("View Weekly Performance Breakdown"):
+            st.dataframe(weekly_df.sort_values('timestamp', ascending=False), use_container_width=True)
+
+        st.markdown("---")
+
+        # Product Ranking Chart
+        rank_df = filtered_v.groupby('sku')['units_refilled'].sum().sort_values(ascending=False).reset_index().head(10)
+        fig_rank = px.bar(rank_df, x='units_refilled', y='sku', orientation='h', 
+                        title="Top 10 High-Velocity Products (by Refill Volume)",
+                        color_discrete_sequence=[config['ui']['theme_primary']])
+        st.plotly_chart(fig_rank, use_container_width=True)
+
+    with tab2:
+        # ... (Rest of your existing Tab 2 code)
+        st.header("Financial Loss Analysis")
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            total_loss = r_df['potential_revenue_lost'].sum()
+            st.metric("Total Potential Revenue Lost", f"${total_loss:,.2f}", delta_color="inverse")
+        with col2:
+            fig_rev = px.scatter(r_df, x='oos_duration_hours', y='potential_revenue_lost', 
+                                size='potential_revenue_lost', hover_name='sku',
+                                title="Revenue Loss vs. Out-of-Stock Duration",
+                                color_discrete_sequence=['#B3261E'])
+            st.plotly_chart(fig_rev, use_container_width=True)
+
+    st.markdown("---")
+    st.caption("SmartShelf AI System • 2026 Internal Operations")
+

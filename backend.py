@@ -1,4 +1,6 @@
 import os
+#from turtle import st
+import streamlit as st
 import numpy as np
 from ultralytics import YOLO
 from dotenv import load_dotenv
@@ -312,3 +314,230 @@ def categorize_gaps(empty_shelf_gaps, all_bboxes_list):
     return overlapping_gaps, non_overlapping_gaps
 
 
+###########################################################
+# For Planogram Compliance
+# -----------------------------
+# Image utilities
+# -----------------------------
+import cv2
+import numpy as np
+#import pytesseract
+import json
+import matplotlib.pyplot as plt
+import google.genai as genai
+from typing import List, Dict, Any, Tuple
+import os
+
+# -----------------------------
+# Image utilities
+# -----------------------------
+def load_image(image_path: str) -> np.ndarray:
+    img = cv2.imread(image_path)
+    if img is None:
+        raise FileNotFoundError(f"Could not load image: {image_path}")
+    return img
+"""
+def preprocess_for_ocr(img: np.ndarray) -> np.ndarray:
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = cv2.bilateralFilter(gray, 9, 75, 75)
+    th = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                               cv2.THRESH_BINARY, 31, 9)
+    return th
+
+def extract_text_annotations(img: np.ndarray) -> List[Dict[str, Any]]:
+    pre = preprocess_for_ocr(img)
+    data = pytesseract.image_to_data(pre, output_type=pytesseract.Output.DICT)
+    annotations = []
+    for i in range(len(data['text'])):
+        text = data['text'][i].strip()
+        conf = float(data['conf'][i]) if data['conf'][i] != '-1' else 0.0
+        if text and conf > 40:
+            x, y, w, h = data['left'][i], data['top'][i], data['width'][i], data['height'][i]
+            annotations.append({
+                "text": text,
+                "bbox": {"x": x, "y": y, "w": w, "h": h},
+                "confidence": conf
+            })
+    return annotations
+"""
+def extract_box_annotations(img: np.ndarray) -> List[Dict[str, Any]]:
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    masks = []
+    lower_red1, upper_red1 = np.array([0, 70, 50]), np.array([10, 255, 255])
+    lower_red2, upper_red2 = np.array([170, 70, 50]), np.array([180, 255, 255])
+    masks.append(cv2.inRange(hsv, lower_red1, upper_red1))
+    masks.append(cv2.inRange(hsv, lower_red2, upper_red2))
+    lower_blue, upper_blue = np.array([100, 70, 50]), np.array([130, 255, 255])
+    masks.append(cv2.inRange(hsv, lower_blue, upper_blue))
+    lower_green, upper_green = np.array([40, 70, 50]), np.array([80, 255, 255])
+    masks.append(cv2.inRange(hsv, lower_green, upper_green))
+
+    combined = np.zeros_like(masks[0])
+    for m in masks:
+        combined = cv2.bitwise_or(combined, m)
+
+    kernel = np.ones((3, 3), np.uint8)
+    combined = cv2.morphologyEx(combined, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+    contours, _ = cv2.findContours(combined, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    boxes = []
+    for cnt in contours:
+        x, y, w, h = cv2.boundingRect(cnt)
+        if w * h > 500:
+            boxes.append({"label": None, "bbox": {"x": x, "y": y, "w": w, "h": h}})
+    return boxes
+
+def associate_text_to_boxes(text_ann: List[Dict[str, Any]], box_ann: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def center(b):
+        return (b["x"] + b["w"] / 2, b["y"] + b["h"] / 2)
+
+    for box in box_ann:
+        bx, by = center(box["bbox"])
+        best = None
+        best_dist = float('inf')
+        for t in text_ann:
+            tx, ty = center(t["bbox"])
+            dist = (bx - tx) ** 2 + (by - ty) ** 2
+            if dist < best_dist:
+                best_dist = dist
+                best = t
+        if best and best_dist < 20000:
+            box["label"] = best["text"]
+    return box_ann
+
+# -----------------------------
+# Gemini API interaction
+# -----------------------------
+def build_llm_payload_for_gemini(image_meta: Dict[str, Any],
+                                 text_annotations: List[Dict[str, Any]],
+                                 box_annotations: List[Dict[str, Any]]) -> str:
+    prompt_text = (
+        "You are a retail merchandising expert. Analyze the provided image and its annotations. "
+        "Provide me with a summarised report on planogram violation. "
+        "This will be important for my vendor contract / compliance. "
+        "Provide actionable planogram recommendations. "
+        "Output JSON with keys: 'summary', 'recommendations', 'planogram'.\n\n"
+        f"Image Metadata: {json.dumps(image_meta)}\n"
+        f"Text Annotations: {json.dumps(text_annotations)}\n"
+        f"Box Annotations: {json.dumps(box_annotations)}\n"
+    )
+    return prompt_text
+
+# -----------------------------
+# Planogram generation
+# -----------------------------
+def generate_planogram_from_llm(llm_output: Dict[str, Any]) -> Dict[str, Any]:
+    # Extract the 'planogram' part from the LLM's output
+    llm_generated_planogram_content = llm_output.get("planogram", {})
+
+    # Initialize the planogram structure for visualization
+    visual_planogram = {}
+
+    # Check if the LLM's generated planogram content contains a 'shelves' key
+    # with a list of shelves (which it currently doesn't based on the user's output)
+    if "shelves" in llm_generated_planogram_content and isinstance(llm_generated_planogram_content["shelves"], list):
+        visual_planogram["shelves"] = llm_generated_planogram_content["shelves"]
+        visual_planogram["notes"] = llm_generated_planogram_content.get("notes", "Planogram generated by LLM.")
+    else:
+        # Fallback: create a generic planogram structure for visualization
+        # The visualize_planogram expects a list of shelves, each with bays and products
+        visual_planogram["shelves"] = [
+            {
+                "shelf_id": 1,
+                "bays": [
+                    {"bay_id": 1, "products": [{"sku": "Product A", "facings": 3, "position": [0, 0]}]},
+                    {"bay_id": 2, "products": [{"sku": "Product B", "facings": 2, "position": [0, 0]}]}
+                ]
+            },
+            {
+                "shelf_id": 2,
+                "bays": [
+                    {"bay_id": 1, "products": [{"sku": "Product C", "facings": 1, "position": [0, 0]}]},
+                    {"bay_id": 2, "products": [{"sku": "Product D", "facings": 4, "position": [0, 0]}]}
+                ]
+            }
+        ]
+        visual_planogram["notes"] = "Fallback visual planogram generated as LLM output did not provide a direct 'shelves' structure for visualization."
+
+    # Optionally, you can also store the LLM's original analytical output for reference
+    visual_planogram["llm_analysis_summary"] = llm_generated_planogram_content.get("current_state_analysis", "No LLM analysis provided.")
+    visual_planogram["llm_recommendations"] = llm_generated_planogram_content.get("proposed_enhancements", [])
+
+    return visual_planogram
+
+# -----------------------------
+# Planogram Visualization
+# -----------------------------
+def visualize_planogram(planogram: Dict[str, Any], figsize: Tuple[int, int] = (10, 6)) -> None:
+    shelves = planogram.get("shelves", [])
+    fig, ax = plt.subplots(figsize=figsize)
+    y_offset = 0
+    for shelf in shelves:
+        bays = shelf.get("bays", [])
+        ax.plot([0, 10], [y_offset, y_offset], color='black', linewidth=2)
+        x_offset = 0
+        for bay in bays:
+            products = bay.get("products", [])
+            ax.add_patch(plt.Rectangle((x_offset, y_offset), 2, 1, fill=False, edgecolor='gray'))
+            px = x_offset + 0.1
+            py = y_offset + 0.1
+            for p in products:
+                sku = p.get("sku", "SKU")
+                facings = p.get("facings", 1)
+                for f in range(facings):
+                    ax.add_patch(plt.Rectangle((px + f * 0.15, py), 0.12, 0.3, color='skyblue', alpha=0.7))
+                ax.text(px, py + 0.35, f"{sku} ({facings}x)", fontsize=8)
+            x_offset += 2.2
+        y_offset += 1.5
+
+    ax.set_xlim(0, 10)
+    ax.set_ylim(-0.5, y_offset + 0.5)
+    ax.set_title("Planogram Visualization")
+    ax.axis('off')
+    plt.tight_layout()
+    st.pyplot(fig)
+
+###########################################################
+# For  Smart Shelf Dashboard
+# -----------------------------
+
+import pandas as pd
+import numpy as np
+import os
+from datetime import datetime, timedelta
+
+def generate_dummy_data():
+    os.makedirs('data', exist_ok=True)
+    skus = [f"SKU_{i:03d}" for i in range(1, 21)]
+    categories = ['Beverages', 'Snacks', 'Dairy', 'Frozen', 'Produce']
+    
+    # 1. Product Velocity & Restock Efficiency Data
+    velocity_rows = []
+    for _ in range(200):
+        sku = np.random.choice(skus)
+        alert_time = datetime.now() - timedelta(days=np.random.randint(0, 7), hours=np.random.randint(0, 24))
+        # Wait time between 5 mins and 120 mins
+        wait_time = np.random.randint(5, 120)
+        refill_time = alert_time + timedelta(minutes=wait_time)
+        velocity_rows.append({
+            'sku': sku,
+            'category': np.random.choice(categories),
+            'alert_timestamp': alert_time,
+            'refill_timestamp': refill_time,
+            'wait_time_mins': wait_time,
+            'units_refilled': np.random.randint(10, 50)
+        })
+    pd.DataFrame(velocity_rows).to_csv('data/product_velocity.csv', index=False)
+
+    # 2. Lost Revenue Data
+    revenue_rows = []
+    for sku in skus:
+        oos_duration = np.random.uniform(1.0, 8.0) # hours
+        avg_velocity = np.random.uniform(5.0, 15.0) # units/hour
+        unit_price = np.random.uniform(2.5, 25.0)
+        revenue_rows.append({
+            'sku': sku,
+            'oos_duration_hours': round(oos_duration, 2),
+            'potential_revenue_lost': round(oos_duration * avg_velocity * unit_price, 2)
+        })
+    pd.DataFrame(revenue_rows).to_csv('data/lost_revenue.csv', index=False)

@@ -1,0 +1,93 @@
+{
+    "summary": "The shelf is generally well-stocked with minor gaps in the bar soap section.",
+    "recommendations": [
+        "Replenish missing bar soaps on the third shelf.",
+        "Ensure all products are front-faced for better presentation.",
+        "Group men's grooming products together for consistency.",
+        "Audit price labels to ensure accuracy.",
+        "Reduce facings for slow-moving items to free up space."
+    ],
+    "planogram": {
+        "shelves": [
+            {
+                "shelf_id": 1,
+                "bays": [
+                    {
+                        "bay_id": 1,
+                        "products": [
+                            {
+                                "sku": "Dial Body Wash",
+                                "facings": 3,
+                                "position": [
+                                    0,
+                                    0
+                                ]
+                            },
+                            {
+                                "sku": "Dove Men+Care",
+                                "facings": 2,
+                                "position": [
+                                    1,
+                                    0
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "shelf_id": 2,
+                "bays": [
+                    {
+                        "bay_id": 1,
+                        "products": [
+                            {
+                                "sku": "Softsoap Pump",
+                                "facings": 4,
+                                "position": [
+                                    0,
+                                    0
+                                ]
+                            },
+                            {
+                                "sku": "Purell Pump",
+                                "facings": 2,
+                                "position": [
+                                    1,
+                                    0
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "shelf_id": 3,
+                "bays": [
+                    {
+                        "bay_id": 1,
+                        "products": [
+                            {
+                                "sku": "Irish Spring Bar Soap",
+                                "facings": 3,
+                                "position": [
+                                    0,
+                                    0
+                                ]
+                            },
+                            {
+                                "sku": "Dial Hand Soap",
+                                "facings": 2,
+                                "position": [
+                                    1,
+                                    0
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "notes": "Planogram generated from shelf analysis."
+    }
+}
